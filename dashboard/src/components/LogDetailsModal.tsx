@@ -54,7 +54,7 @@ export const LogDetailsModal = () => {
                 <div key={idx} className="bg-gradient-to-br from-dark-bg/50 to-dark-bg/30 backdrop-blur-sm border border-dark-border/30 rounded-xl p-4 hover:border-accent/30 transition-all duration-200">
                   <span className="text-xs text-text-secondary/70 uppercase tracking-wider font-semibold block mb-2">{item.label}:</span>
                   <span className="text-sm text-text-primary font-medium">{item.value}</span>
-                  {item.label == 'IP Address'? <IPInfoPopup ip={Number(item.value)} /> : null}
+                  {item.label == 'IP Address'? <IPInfoPopup ip={item.value} /> : null}
                 </div>
               ))}
               <div className="bg-gradient-to-br from-dark-bg/50 to-dark-bg/30 backdrop-blur-sm border border-dark-border/30 rounded-xl p-4 hover:border-accent/30 transition-all duration-200">
