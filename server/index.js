@@ -98,6 +98,10 @@ function broadcastToDashboards(data) {
 }
 
 // Main analysis endpoint
+const reportRouter=require("./routes/report");
+app.use("/api/report", reportRouter.router);
+
+
 app.post('/api/analyze', async (req, res) => {
   const { userInput, page = 'login', field = 'username' } = req.body;
 
