@@ -1,5 +1,6 @@
 import { useDashboardStore } from '../store/dashboardStore';
 import { getAttackTypeColor, formatTimestamp, escapeHtml, getSeverityColor } from '../utils/helpers';
+import IPInfoPopup from './IpInfo';
 
 export const LogDetailsModal = () => {
   const selectedLog = useDashboardStore((state) => state.selectedLog);
@@ -48,9 +49,12 @@ export const LogDetailsModal = () => {
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-4">
               {detailItems.map((item, idx) => (
+
+
                 <div key={idx} className="bg-gradient-to-br from-dark-bg/50 to-dark-bg/30 backdrop-blur-sm border border-dark-border/30 rounded-xl p-4 hover:border-accent/30 transition-all duration-200">
                   <span className="text-xs text-text-secondary/70 uppercase tracking-wider font-semibold block mb-2">{item.label}:</span>
                   <span className="text-sm text-text-primary font-medium">{item.value}</span>
+                  {item.label == 'IP Address'? <IPInfoPopup ip={Number(item.value)} /> : null}
                 </div>
               ))}
               <div className="bg-gradient-to-br from-dark-bg/50 to-dark-bg/30 backdrop-blur-sm border border-dark-border/30 rounded-xl p-4 hover:border-accent/30 transition-all duration-200">

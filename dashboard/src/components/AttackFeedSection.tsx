@@ -1,9 +1,10 @@
+import { useNavigate } from "react-router-dom";
 import { useDashboardStore } from '../store/dashboardStore';
 import { getAttackTypeColor, formatTimestamp, getSeverityColor } from '../utils/helpers';
 
 export const AttackFeedSection = () => {
   const logs = useDashboardStore((state) => state.logs);
-  const setSelectedLog = useDashboardStore((state) => state.setSelectedLog);
+  const navigate = useNavigate();
   return (
     <section className="relative bg-dark-card/80 backdrop-blur-sm rounded-2xl p-8 mb-8 border border-dark-border/50 shadow-2xl overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 via-transparent to-transparent pointer-events-none"></div>
@@ -58,8 +59,8 @@ export const AttackFeedSection = () => {
                     <td className="p-4">
                       <button
                         className="px-4 py-2 bg-gradient-to-r from-accent to-cyan-400 text-dark-bg border-none rounded-lg font-bold text-xs cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 active:scale-95"
-                        onClick={() => setSelectedLog(log)}
-                      >
+                        onClick={() => navigate(`/logs/${log.id}`)}
+                        >
                         View Details
                       </button>
                     </td>
