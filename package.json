@@ -1,0 +1,21 @@
+{
+  "name": "chameleon-honeypot",
+  "version": "1.0.0",
+  "description": "Adaptive Deception Honeypot - CHAMELEON",
+  "main": "server/index.js",
+  "scripts": {
+    "install-all": "npm install && cd frontend-trap && npm install && cd ../dashboard && npm install",
+    "dev:backend": "cd server && npm run dev",
+    "dev:frontend": "cd frontend-trap && npm start",
+    "dev:dashboard": "cd dashboard && npm start",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:dashboard\""
+  },
+  "keywords": ["honeypot", "security", "deception"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3"
+  }
+}
+
