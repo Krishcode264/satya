@@ -1,17 +1,12 @@
 /**
  * Attack Log Manager with Blockchain-style Hash Chaining
  * Provides immutability through cryptographic hash chaining
+ * Now uses MongoDB for persistent storage
  */
 
 const crypto = require('crypto');
-
-// In-memory storage (in production, use a database)
-let attackLogs = [];
-let hashChain = {
-  genesisHash: null,
-  latestHash: null,
-  entries: []
-};
+const mongoose = require('mongoose');
+const { AttackLog } = require('./schema/attack');
 
 /**
  * Calculate SHA256 hash
@@ -43,13 +38,29 @@ function createHashChainEntry(logEntry, previousHash) {
 }
 
 /**
- * Log an attack with hash chain linkage
+ * Get the latest hash from database
  */
-function logAttack(attackData) {
-  const timestamp = new Date().toISOString();
+async function getLatestHash() {
+  try {
+    if (mongoose.connection.readyState !== 1) return null;
+    const latest = await AttackLog.findOne().sort({ timestamp: -1 }).select('currentHash').lean();
+    return latest?.currentHash || null;
+  } catch (error) {
+    console.error('Error getting latest hash:', error);
+    return null;
+  }
+}
+
+/**
+ * Log an attack with hash chain linkage - saves to MongoDB
+ */
+async function logAttack(attackData) {
+  const timestamp = new Date();
   
-  const logEntry = {
-    id: attackLogs.length + 1,
+  // Get previous hash from database
+  const previousHash = await getLatestHash();
+  
+  const logEntryData = {
     timestamp: timestamp,
     input: attackData.input,
     attackType: attackData.attackType,
@@ -58,162 +69,311 @@ function logAttack(attackData) {
     field: attackData.field || 'unknown',
     deceptionUsed: attackData.deceptionUsed,
     severity: attackData.severity || 0,
-    previousHash: hashChain.latestHash,
-    currentHash: null
+    previousHash: previousHash,
+    fingerprint: attackData.fingerprint,
+    session: attackData.session,
+    ua_hash: attackData.ua_hash,
+    accept_language: attackData.accept_language,
+    route: attackData.route,
+    method: attackData.method
   };
 
   // Create hash chain entry
-  const chainEntry = createHashChainEntry(logEntry, hashChain.latestHash);
-  logEntry.currentHash = chainEntry.hash;
+  const chainEntry = createHashChainEntry(logEntryData, previousHash);
+  logEntryData.currentHash = chainEntry.hash;
 
-  // Initialize genesis hash if this is the first entry
-  if (hashChain.genesisHash === null) {
-    hashChain.genesisHash = chainEntry.hash;
+  // Save to MongoDB if connected
+  let savedLog = null;
+  if (mongoose.connection.readyState === 1) {
+    try {
+      savedLog = await AttackLog.create(logEntryData);
+    } catch (error) {
+      console.error('Error saving attack log to MongoDB:', error);
+      // Continue with in-memory fallback
+    }
   }
 
-  // Update hash chain
-  hashChain.latestHash = chainEntry.hash;
-  hashChain.entries.push(chainEntry);
-
-  // Keep only last 100 chain entries in memory (for demo)
-  if (hashChain.entries.length > 100) {
-    hashChain.entries.shift();
-  }
-
-  // Store log entry
-  attackLogs.push(logEntry);
-
-  // Keep only last 1000 logs in memory (for demo)
-  if (attackLogs.length > 1000) {
-    attackLogs.shift();
-  }
+  // Return log entry (use saved DB entry if available, otherwise return the data)
+  const logEntry = savedLog ? {
+    id: savedLog._id.toString(),
+    timestamp: savedLog.timestamp.toISOString(),
+    input: savedLog.input,
+    attackType: savedLog.attackType,
+    ip: savedLog.ip,
+    page: savedLog.page,
+    field: savedLog.field,
+    deceptionUsed: savedLog.deceptionUsed,
+    severity: savedLog.severity,
+    previousHash: savedLog.previousHash,
+    currentHash: savedLog.currentHash
+  } : {
+    id: Date.now().toString(),
+    timestamp: timestamp.toISOString(),
+    ...logEntryData
+  };
 
   return logEntry;
 }
 
 /**
- * Get all attack logs
+ * Get all attack logs from MongoDB
  */
-function getAttackLogs(limit = 100) {
-  return attackLogs.slice(-limit).reverse(); // Most recent first
-}
-
-/**
- * Get attack statistics
- */
-function getStats() {
-  const stats = {
-    totalAttacks: attackLogs.length,
-    sqlInjection: 0,
-    xssAttack: 0,
-    commandInjection: 0,
-    dirTraversal: 0,
-    unknownSuspicious: 0,
-    normal: 0,
-    highRiskCount: 0,
-    totalDelayTime: 0,
-    avgDelayTime: 0,
-    attacksByPage: {},
-    attacksByHour: {}
-  };
-
-  attackLogs.forEach(log => {
-    // Count by attack type
-    switch (log.attackType) {
-      case 'SQL_INJECTION':
-        stats.sqlInjection++;
-        break;
-      case 'XSS_ATTACK':
-        stats.xssAttack++;
-        break;
-      case 'COMMAND_INJECTION':
-        stats.commandInjection++;
-        break;
-      case 'DIR_TRAVERSAL':
-        stats.dirTraversal++;
-        break;
-      case 'UNKNOWN_SUSPICIOUS':
-        stats.unknownSuspicious++;
-        break;
-      case 'NORMAL':
-        stats.normal++;
-        break;
+async function getAttackLogs(limit = 100) {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      return []; // Return empty if DB not connected
     }
-
-    // Count high-risk attacks (severity >= 3)
-    if (log.severity >= 3) {
-      stats.highRiskCount++;
-      stats.totalDelayTime += 3; // 3 seconds per high-risk attack
-    }
-
-    // Count by page
-    stats.attacksByPage[log.page] = (stats.attacksByPage[log.page] || 0) + 1;
-
-    // Count by hour
-    const hour = new Date(log.timestamp).getHours();
-    stats.attacksByHour[hour] = (stats.attacksByHour[hour] || 0) + 1;
-  });
-
-  // Calculate average delay
-  if (stats.highRiskCount > 0) {
-    stats.avgDelayTime = (stats.totalDelayTime / stats.highRiskCount).toFixed(2);
+    
+    const logs = await AttackLog.find()
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .lean();
+    
+    // Transform to match expected format
+    return logs.map(log => ({
+      id: log._id.toString(),
+      timestamp: log.timestamp.toISOString(),
+      input: log.input,
+      attackType: log.attackType,
+      ip: log.ip,
+      page: log.page,
+      field: log.field,
+      deceptionUsed: log.deceptionUsed,
+      severity: log.severity,
+      previousHash: log.previousHash,
+      currentHash: log.currentHash
+    }));
+  } catch (error) {
+    console.error('Error fetching attack logs from MongoDB:', error);
+    return [];
   }
-
-  return stats;
 }
 
 /**
- * Get hash chain information
+ * Get attack statistics from MongoDB
  */
-function getHashChain() {
-  return {
-    genesisHash: hashChain.genesisHash,
-    latestHash: hashChain.latestHash,
-    chainLength: hashChain.entries.length,
-    recentEntries: hashChain.entries.slice(-5).reverse() // Last 5 entries, most recent first
-  };
-}
-
-/**
- * Get log entry by ID
- */
-function getLogById(id) {
-  return attackLogs.find(log => log.id === id);
-}
-
-/**
- * Verify hash chain integrity
- */
-function verifyHashChain() {
-  if (hashChain.entries.length === 0) {
-    return { valid: true, message: 'Chain is empty' };
-  }
-
-  for (let i = 1; i < hashChain.entries.length; i++) {
-    const current = hashChain.entries[i];
-    const previous = hashChain.entries[i - 1];
-    
-    // Recalculate hash
-    const entryData = JSON.stringify({
-      timestamp: current.timestamp,
-      input: current.input,
-      attackType: current.attackType,
-      ip: 'verification',
-      previousHash: previous.hash
-    });
-    
-    const calculatedHash = calculateHash(entryData);
-    
-    if (calculatedHash !== current.hash) {
+async function getStats() {
+  try {
+    if (mongoose.connection.readyState !== 1) {
       return {
-        valid: false,
-        message: `Chain broken at entry ${i}`,
-        entryIndex: i
+        totalAttacks: 0,
+        sqlInjection: 0,
+        xssAttack: 0,
+        commandInjection: 0,
+        dirTraversal: 0,
+        unknownSuspicious: 0,
+        normal: 0,
+        highRiskCount: 0,
+        totalDelayTime: 0,
+        avgDelayTime: 0,
+        attacksByPage: {},
+        attacksByHour: {}
       };
     }
-  }
 
-  return { valid: true, message: 'Chain integrity verified' };
+    // Get total count
+    const totalAttacks = await AttackLog.countDocuments();
+
+    // Get counts by attack type
+    const [sqlInjection, xssAttack, commandInjection, dirTraversal, unknownSuspicious, normal] = await Promise.all([
+      AttackLog.countDocuments({ attackType: 'SQL_INJECTION' }),
+      AttackLog.countDocuments({ attackType: 'XSS_ATTACK' }),
+      AttackLog.countDocuments({ attackType: 'COMMAND_INJECTION' }),
+      AttackLog.countDocuments({ attackType: 'DIR_TRAVERSAL' }),
+      AttackLog.countDocuments({ attackType: 'UNKNOWN_SUSPICIOUS' }),
+      AttackLog.countDocuments({ attackType: 'NORMAL' })
+    ]);
+
+    // Get high-risk attacks (severity >= 3)
+    const highRiskLogs = await AttackLog.find({ severity: { $gte: 3 } }).select('severity').lean();
+    const highRiskCount = highRiskLogs.length;
+    const totalDelayTime = highRiskCount * 3; // 3 seconds per high-risk attack
+    const avgDelayTime = highRiskCount > 0 ? (totalDelayTime / highRiskCount).toFixed(2) : 0;
+
+    // Get attacks by page
+    const pageAggregation = await AttackLog.aggregate([
+      { $group: { _id: '$page', count: { $sum: 1 } } }
+    ]);
+    const attacksByPage = {};
+    pageAggregation.forEach(item => {
+      attacksByPage[item._id || 'unknown'] = item.count;
+    });
+
+    // Get attacks by hour
+    const hourAggregation = await AttackLog.aggregate([
+      { $project: { hour: { $hour: '$timestamp' } } },
+      { $group: { _id: '$hour', count: { $sum: 1 } } }
+    ]);
+    const attacksByHour = {};
+    hourAggregation.forEach(item => {
+      attacksByHour[item._id] = item.count;
+    });
+
+    return {
+      totalAttacks,
+      sqlInjection,
+      xssAttack,
+      commandInjection,
+      dirTraversal,
+      unknownSuspicious,
+      normal,
+      highRiskCount,
+      totalDelayTime,
+      avgDelayTime,
+      attacksByPage,
+      attacksByHour
+    };
+  } catch (error) {
+    console.error('Error fetching stats from MongoDB:', error);
+    return {
+      totalAttacks: 0,
+      sqlInjection: 0,
+      xssAttack: 0,
+      commandInjection: 0,
+      dirTraversal: 0,
+      unknownSuspicious: 0,
+      normal: 0,
+      highRiskCount: 0,
+      totalDelayTime: 0,
+      avgDelayTime: 0,
+      attacksByPage: {},
+      attacksByHour: {}
+    };
+  }
+}
+
+/**
+ * Get hash chain information from MongoDB
+ */
+async function getHashChain() {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      return {
+        genesisHash: null,
+        latestHash: null,
+        chainLength: 0,
+        recentEntries: []
+      };
+    }
+
+    // Get first entry (genesis)
+    const genesis = await AttackLog.findOne().sort({ timestamp: 1 }).select('currentHash').lean();
+    const genesisHash = genesis?.currentHash || null;
+
+    // Get latest entry
+    const latest = await AttackLog.findOne().sort({ timestamp: -1 }).select('currentHash').lean();
+    const latestHash = latest?.currentHash || null;
+
+    // Get total count
+    const chainLength = await AttackLog.countDocuments();
+
+    // Get recent 5 entries
+    const recentLogs = await AttackLog.find()
+      .sort({ timestamp: -1 })
+      .limit(5)
+      .select('timestamp attackType input currentHash')
+      .lean();
+
+    const recentEntries = recentLogs.map(log => ({
+      hash: log.currentHash,
+      timestamp: log.timestamp.toISOString(),
+      attackType: log.attackType,
+      input: log.input.length > 50 ? log.input.substring(0, 50) + '...' : log.input
+    })).reverse(); // Most recent first
+
+    return {
+      genesisHash,
+      latestHash,
+      chainLength,
+      recentEntries
+    };
+  } catch (error) {
+    console.error('Error fetching hash chain from MongoDB:', error);
+    return {
+      genesisHash: null,
+      latestHash: null,
+      chainLength: 0,
+      recentEntries: []
+    };
+  }
+}
+
+/**
+ * Get log entry by ID from MongoDB
+ */
+async function getLogById(id) {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      return null;
+    }
+
+    const log = await AttackLog.findById(id).lean();
+    if (!log) return null;
+
+    return {
+      id: log._id.toString(),
+      timestamp: log.timestamp.toISOString(),
+      input: log.input,
+      attackType: log.attackType,
+      ip: log.ip,
+      page: log.page,
+      field: log.field,
+      deceptionUsed: log.deceptionUsed,
+      severity: log.severity,
+      previousHash: log.previousHash,
+      currentHash: log.currentHash
+    };
+  } catch (error) {
+    console.error('Error fetching log by ID from MongoDB:', error);
+    return null;
+  }
+}
+
+/**
+ * Verify hash chain integrity from MongoDB
+ */
+async function verifyHashChain() {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      return { valid: false, message: 'Database not connected' };
+    }
+
+    const logs = await AttackLog.find().sort({ timestamp: 1 }).lean();
+    
+    if (logs.length === 0) {
+      return { valid: true, message: 'Chain is empty' };
+    }
+
+    for (let i = 1; i < logs.length; i++) {
+      const current = logs[i];
+      const previous = logs[i - 1];
+      
+      // Recalculate hash
+      const entryData = JSON.stringify({
+        timestamp: current.timestamp,
+        input: current.input,
+        attackType: current.attackType,
+        ip: current.ip,
+        previousHash: previous.currentHash
+      });
+      
+      const calculatedHash = calculateHash(entryData);
+      
+      if (calculatedHash !== current.currentHash) {
+        return {
+          valid: false,
+          message: `Chain broken at entry ${i}`,
+          entryIndex: i,
+          entryId: current._id.toString()
+        };
+      }
+    }
+
+    return { valid: true, message: 'Chain integrity verified' };
+  } catch (error) {
+    console.error('Error verifying hash chain:', error);
+    return { valid: false, message: 'Error verifying chain', error: error.message };
+  }
 }
 
 module.exports = {

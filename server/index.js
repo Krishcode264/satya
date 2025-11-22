@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const expressWs = require('express-ws');
@@ -10,27 +13,32 @@ const { logAttack, getAttackLogs, getStats, getHashChain } = require('./logManag
 const app = express();
 expressWs(app);
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/chameleon-honeypot';
+// MongoDB connection - reads from .env file or environment variable
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/chameleon-honeypot';
 mongoose.connect(MONGODB_URI, {
-
+  serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
 }).then(() => {
   console.log('✅ MongoDB connected successfully');
 }).catch((err) => {
-  console.error('❌ MongoDB connection error:', err);
+  console.error('❌ MongoDB connection error:', err.message);
   console.log('⚠️  Continuing without MongoDB - attacks will not be persisted to database');
+
 });
 
-// Import model after mongoose is set up
-const AttackAttempt = require('./schema/attack');
+// Import models after mongoose is set up
+const { AttackAttempt, AttackLog } = require('./schema/attack');
 
-// Debug: Verify model is loaded correctly
+// Debug: Verify models are loaded correctly
 if (!AttackAttempt || typeof AttackAttempt.findOneAndUpdate !== 'function') {
   console.warn('⚠️  AttackAttempt model may not be properly initialized');
-  console.log('AttackAttempt type:', typeof AttackAttempt);
-  console.log('AttackAttempt constructor:', AttackAttempt?.constructor?.name);
 } else {
   console.log('✅ AttackAttempt model loaded successfully');
+}
+
+if (!AttackLog || typeof AttackLog.create !== 'function') {
+  console.warn('⚠️  AttackLog model may not be properly initialized');
+} else {
+  console.log('✅ AttackLog model loaded successfully');
 }
 
 app.use(cors());
@@ -38,23 +46,40 @@ app.use(cors());
 app.use(express.json());
 app.set('trust proxy', true); // important if behind proxy
 app.use(cookieParser());
-app.use(fingerprint);
+app.use(fingerprint); // Fingerprint middleware (must come first)
+app.use(require('./middleware/tarpit-middleware')); // Tarpit middleware (uses fingerprint)
 
 // Store WebSocket connections for dashboard
 const dashboardConnections = new Set();
 
 // WebSocket endpoint for real-time dashboard updates
-app.ws('/ws', (ws, req) => {
+app.ws('/ws', async (ws, req) => {
   dashboardConnections.add(ws);
   console.log('Dashboard connected');
 
-  // Send initial data
-  ws.send(JSON.stringify({
-    type: 'initial',
-    logs: getAttackLogs(),
-    stats: getStats(),
-    hashChain: getHashChain()
-  }));
+  // Send initial data from MongoDB
+  try {
+    const [logs, stats, hashChain] = await Promise.all([
+      getAttackLogs(),
+      getStats(),
+      getHashChain()
+    ]);
+
+    ws.send(JSON.stringify({
+      type: 'initial',
+      logs,
+      stats,
+      hashChain
+    }));
+  } catch (error) {
+    console.error('Error sending initial data to dashboard:', error);
+    ws.send(JSON.stringify({
+      type: 'initial',
+      logs: [],
+      stats: {},
+      hashChain: {}
+    }));
+  }
 
   ws.on('close', () => {
     dashboardConnections.delete(ws);
@@ -75,29 +100,38 @@ function broadcastToDashboards(data) {
 // Main analysis endpoint
 app.post('/api/analyze', async (req, res) => {
   const { userInput, page = 'login', field = 'username' } = req.body;
-  
+
   if (!userInput) {
     return res.status(400).json({ error: 'userInput is required' });
   }
 
   // Get client IP
   const ip = req.ip || req.connection.remoteAddress || '127.0.0.1';
-console.log(ip,"ip is here ");
+  console.log(ip, "ip is here ");
   // Detect attack type
   const attackResult = detectAttack(userInput);
-  console.log(attackResult,"attackResult");
+  console.log(attackResult, "attackResult");
   // Generate deception response
   const deception = generateDeceptionResponse(attackResult.attackType, attackResult.severity);
-  
-  // Log the attack
-  const logEntry = logAttack({
+
+  // Get fingerprint data from middleware
+  const { fingerprint: fp, session, ip: fpIp, ua, al, path, method } = req.fingerprint || {};
+
+  // Log the attack to MongoDB (all attacks, including NORMAL)
+  const logEntry = await logAttack({
     input: userInput,
     attackType: attackResult.attackType,
-    ip: ip,
+    ip: fpIp || ip,
     page: page,
     field: field,
     deceptionUsed: deception.message,
-    severity: attackResult.severity
+    severity: attackResult.severity,
+    fingerprint: fp,
+    session: session,
+    ua_hash: ua ? hmacHash(ua) : null,
+    accept_language: al,
+    route: path,
+    method: method
   });
 
   // Save to MongoDB if attack is suspicious (not NORMAL)
@@ -109,34 +143,31 @@ console.log(ip,"ip is here ");
         throw new Error('AttackAttempt model is not properly initialized');
       }
 
-      // Get fingerprint data from middleware
-      const { fingerprint: fp, session, ip: fpIp, ua, al, path, method } = req.fingerprint || {};
-      
       // Create payload hash
       const payload = JSON.stringify(req.body || req.query || req.url);
       const payload_hash = hmacHash(payload);
-      
+
       // Normalize attack type for database (convert to lowercase, keep underscores)
       const detectionType = attackResult.attackType.toLowerCase();
-      
+
       // Store sample payload (truncated for safety, max 500 chars)
       const sample_payload = userInput.length > 500 ? userInput.substring(0, 500) + '...' : userInput;
-      
+
       // Use findOneAndUpdate with upsert to track count
       dbEntry = await AttackAttempt.findOneAndUpdate(
-        { 
-          fingerprint: fp, 
-          attack_type: detectionType, 
-          payload_hash 
+        {
+          fingerprint: fp,
+          attack_type: detectionType,
+          payload_hash
         },
         {
-          $setOnInsert: { 
-            fingerprint: fp, 
-            session, 
-            ip: fpIp || ip, 
-            ua_hash: hmacHash(ua || ''), 
-            accept_language: al, 
-            route: path, 
+          $setOnInsert: {
+            fingerprint: fp,
+            session,
+            ip: fpIp || ip,
+            ua_hash: hmacHash(ua || ''),
+            accept_language: al,
+            route: path,
             method,
             sample_payload
           },
@@ -145,7 +176,7 @@ console.log(ip,"ip is here ");
         },
         { upsert: true, new: true }
       );
-      
+
       console.log('📝 Attack saved to MongoDB:', {
         fingerprint: fp?.slice(0, 16),
         attack_type: detectionType,
@@ -158,11 +189,17 @@ console.log(ip,"ip is here ");
   }
 
   // Broadcast to dashboards (include DB entry info if available)
+  // Fetch latest stats and hash chain from MongoDB
+  const [stats, hashChain] = await Promise.all([
+    getStats(),
+    getHashChain()
+  ]);
+
   broadcastToDashboards({
     type: 'new_attack',
     log: logEntry,
-    stats: getStats(),
-    hashChain: getHashChain(),
+    stats,
+    hashChain,
     dbEntry: dbEntry ? {
       id: dbEntry._id,
       count: dbEntry.count,
@@ -184,17 +221,35 @@ console.log(ip,"ip is here ");
   });
 });
 
-// API endpoints for dashboard
-app.get('/api/logs', (req, res) => {
-  res.json(getAttackLogs());
+// API endpoints for dashboard - fetch from MongoDB
+app.get('/api/logs', async (req, res) => {
+  try {
+    const logs = await getAttackLogs();
+    res.json(logs);
+  } catch (error) {
+    console.error('Error fetching logs:', error);
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
 });
 
-app.get('/api/stats', (req, res) => {
-  res.json(getStats());
+app.get('/api/stats', async (req, res) => {
+  try {
+    const stats = await getStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
 });
 
-app.get('/api/hash-chain', (req, res) => {
-  res.json(getHashChain());
+app.get('/api/hash-chain', async (req, res) => {
+  try {
+    const hashChain = await getHashChain();
+    res.json(hashChain);
+  } catch (error) {
+    console.error('Error fetching hash chain:', error);
+    res.status(500).json({ error: 'Failed to fetch hash chain' });
+  }
 });
 
 const PORT = process.env.PORT || 3001;
