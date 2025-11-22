@@ -44,7 +44,7 @@ export default function LogDetailsPage() {
             <p className="text-xs text-text-secondary mb-2">{item.label}:</p>
             <p className="text-lg font-semibold">{item.value}</p>
 
-            {item.label === "IP Address" && <IPInfoPopup ip={Number(item.value)} />}
+            {item.label === "IP Address" && <IPInfoPopup ip={item.value} />}
           </div>
         ))}
 

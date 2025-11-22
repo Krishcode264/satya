@@ -55,12 +55,12 @@ class IPWhoIsAPI {
 const api = new IPWhoIsAPI();
 
 // -------- Component --------
-export default function IPInfoPopup({ ip }: { ip: number }) {
+export default function IPInfoPopup({ ip }: { ip: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<IPWhoIsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-
+  console.log(ip,"ip");
   const openAndFetch = async () => {
     setOpen(true);
     setError(null);
