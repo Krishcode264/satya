@@ -30,7 +30,7 @@ export const AttackFeedSection = () => {
                 </tr>
               </thead>
               <tbody>
-                {logs.map((log, idx) => (
+                {logs.map((log) => (
                   <tr 
                     key={log.id} 
                     className="border-b border-dark-border/30 hover:bg-gradient-to-r hover:from-dark-bg/50 hover:to-dark-bg/30 transition-all duration-200 group"
