@@ -10,12 +10,19 @@
     "dev:dashboard": "cd dashboard && npm start",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:dashboard\""
   },
-  "keywords": ["honeypot", "security", "deception"],
+  "keywords": [
+    "honeypot",
+    "security",
+    "deception"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "zustand": "^5.0.8"
   }
 }
-
