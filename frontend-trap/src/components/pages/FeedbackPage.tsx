@@ -29,7 +29,7 @@ export const FeedbackPage = () => {
           page: 'feedback',
           field: 'name',
         });
-        messages.push(nameResponse);
+        messages.push(nameResponse.message || '');
       }
 
       // Send email
@@ -39,7 +39,7 @@ export const FeedbackPage = () => {
           page: 'feedback',
           field: 'email',
         });
-        messages.push(emailResponse);
+        messages.push(emailResponse.message || '');
       }
 
       // Send comment
@@ -49,7 +49,7 @@ export const FeedbackPage = () => {
           page: 'feedback',
           field: 'comment',
         });
-        messages.push(commentResponse);
+        messages.push(commentResponse.message || '');
       }
 
       setServerMessage(messages.join('\n\n'));

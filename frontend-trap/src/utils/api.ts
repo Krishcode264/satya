@@ -1,7 +1,7 @@
 interface AnalyzeRequest {
   userInput: string;
-  page: string;
-  field: string;
+  page?: string;
+  field?: string;
 }
 
 interface AnalyzeResponse {
@@ -10,45 +10,35 @@ interface AnalyzeResponse {
   attackDetected?: boolean;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-export const analyzeInput = async (data: AnalyzeRequest): Promise<string> => {
+export const analyzeInput = async (data: AnalyzeRequest): Promise<AnalyzeResponse> => {
   try {
     const url = `${API_URL}/api/analyze`;
-    
-    console.log('Sending request to:', url);
-    console.log('Request data:', data);
 
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(data),
     });
 
-    console.log('Response status:', response.status);
-    console.log('Response ok:', response.ok);
-
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error response:', errorText);
-      throw new Error(`Server error: ${response.status} - ${errorText}`);
+      const message = await response.text();
+      throw new Error(`Server error: ${response.status} - ${message}`);
     }
 
-    const result: AnalyzeResponse = await response.json();
-    console.log('Response data:', result);
-    
+    const result = await response.json();
+
     if (!result.message) {
-      throw new Error('Invalid response format: missing message');
+      throw new Error("Invalid response from server");
     }
 
     return result;
+
   } catch (error) {
-    console.error('API Error:', error);
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('Connection error. Please try again.');
+    if (error instanceof Error) throw error;
+    throw new Error("Connection error. Please try again.");
   }
 };

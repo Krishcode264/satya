@@ -15,7 +15,7 @@ export const SearchPage = () => {
         page: 'search',
         field: 'query',
       });
-      setServerMessage(response);
+      setServerMessage(response.message || '');
     } catch (error) {
       setServerMessage(error instanceof Error ? error.message : 'Connection error. Please try again.');
     } finally {

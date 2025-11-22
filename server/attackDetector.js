@@ -76,8 +76,20 @@ function detectAttack(input) {
     return { attackType: 'NORMAL', severity: 0, matchedPattern: null };
   }
 
-  const inputUpper = input.toUpperCase();
-  
+  const trimmed = input.trim();
+
+  // -----------------------
+  // 1. NEW OPERATOR-ONLY DETECTION
+  // -----------------------
+  const operatorOnlyPattern = /^[\s;|&`,]+$/;   // catches ; | && , `
+  if (operatorOnlyPattern.test(trimmed)) {
+    return {
+      attackType: 'SUSPICIOUS_OPERATOR_ONLY',
+      severity: 1,
+      matchedPattern: 'Operator-only input detected ( ; | && , ` )'
+    };
+  }
+
   // Check SQL Injection
   for (const pattern of ATTACK_PATTERNS.SQL_INJECTION) {
     if (pattern.test(input)) {
@@ -122,7 +134,7 @@ function detectAttack(input) {
     }
   }
 
-  // Check for suspicious patterns (lower severity)
+  // Check for suspicious patterns
   const suspiciousPatterns = [
     /<[^>]+>/,
     /['"]/,
@@ -132,9 +144,7 @@ function detectAttack(input) {
 
   let suspiciousCount = 0;
   for (const pattern of suspiciousPatterns) {
-    if (pattern.test(input)) {
-      suspiciousCount++;
-    }
+    if (pattern.test(input)) suspiciousCount++;
   }
 
   if (suspiciousCount >= 2) {
@@ -150,8 +160,8 @@ function detectAttack(input) {
 
 /**
  * Generate deception response based on attack type
- * @param {string} attackType - Type of attack detected
- * @param {number} severity - Severity level (0-5)
+ * @param {string} attackType
+ * @param {number} severity
  * @returns {Object} { message, delay }
  */
 function generateDeceptionResponse(attackType, severity) {
@@ -179,7 +189,7 @@ function generateDeceptionResponse(attackType, severity) {
       "SystemError: Command interpreter not available in this context.",
       "ExecutionError: Command execution has been disabled for security reasons."
     ],
-    
+
     DIR_TRAVERSAL: [
       "FilesystemWarning: Path sanitization blocked unsafe directory traversal.",
       "AccessDenied: Attempted path traversal detected and prevented.",
@@ -187,13 +197,22 @@ function generateDeceptionResponse(attackType, severity) {
       "SecurityError: Directory traversal attempt logged and blocked.",
       "ValidationError: Path contains prohibited sequence '..'."
     ],
-    
+
     UNKNOWN_SUSPICIOUS: [
       "ValidationError: Input contains unexpected characters.",
       "ProcessingError: Unable to parse input format.",
       "FormatError: Input does not match expected pattern."
     ],
-    
+
+    // -----------------------
+    // 2. NEW RESPONSE FOR OPERATOR-ONLY ATTACK
+    // -----------------------
+    SUSPICIOUS_OPERATOR_ONLY: [
+      "ValidationError: Input contains unsafe operator characters.",
+      "FormatError: Operator-only input is not allowed.",
+      "SecurityWarning: Suspicious operators detected in username."
+    ],
+
     NORMAL: [
       "Processing your request...",
       "Validating credentials...",
@@ -214,4 +233,3 @@ module.exports = {
   detectAttack,
   generateDeceptionResponse
 };
-

@@ -1,5 +1,5 @@
-import { useTrapStore } from '../../store/trapStore';
-import { analyzeInput } from '../../utils/api';
+import { useTrapStore } from "../../store/trapStore";
+import { analyzeInput } from "../../utils/api";
 
 export const LoginPage = () => {
   const {
@@ -15,39 +15,23 @@ export const LoginPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setServerMessage(''); // always start fresh with a string
+    setServerMessage("");
 
     try {
-      // --- Send USERNAME ---
-      const usernameResponse = await analyzeInput({
+      // Analyze username field (most common attack vector)
+      const response = await analyzeInput({
         userInput: loginUsername,
-        page: 'login',
-        field: 'username',
+        page: "login",
+        field: "username",
       });
 
-      console.log('Username response:', usernameResponse);
+      setServerMessage(response.message || "");
 
-      // Store ONLY the message, not the whole object
-      setServerMessage(usernameResponse.message || '');
-
-      // --- Send PASSWORD ---
-      if (loginPassword) {
-        const passwordResponse = await analyzeInput({
-          userInput: loginPassword,
-          page: 'login',
-          field: 'password',
-        });
-
-        // Append message nicely (safe for strings)
-        setServerMessage((prev) =>
-          `${prev}\n\n${passwordResponse.message || ''}`
-        );
-      }
     } catch (error) {
       setServerMessage(
         error instanceof Error
           ? error.message
-          : 'Connection error. Please try again.'
+          : "Connection error. Please try again."
       );
     } finally {
       setIsLoading(false);

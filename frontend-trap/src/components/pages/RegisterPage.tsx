@@ -29,7 +29,7 @@ export const RegisterPage = () => {
           page: 'register',
           field: 'name',
         });
-        messages.push(nameResponse);
+        messages.push(nameResponse.message || '');
       }
 
       // Send email
@@ -39,7 +39,7 @@ export const RegisterPage = () => {
           page: 'register',
           field: 'email',
         });
-        messages.push(emailResponse);
+        messages.push(emailResponse.message || '');
       }
 
       // Send password
@@ -49,7 +49,7 @@ export const RegisterPage = () => {
           page: 'register',
           field: 'password',
         });
-        messages.push(passwordResponse);
+        messages.push(passwordResponse.message || '');
       }
 
       setServerMessage(messages.join('\n\n'));

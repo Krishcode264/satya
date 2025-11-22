@@ -27,7 +27,7 @@ export const UploadPage = () => {
           page: 'upload',
           field: 'filename',
         });
-        messages.push(fileNameResponse);
+        messages.push(fileNameResponse.message || '');
       }
 
       // Send description
@@ -37,7 +37,7 @@ export const UploadPage = () => {
           page: 'upload',
           field: 'description',
         });
-        messages.push(descriptionResponse);
+        messages.push(descriptionResponse.message || '');
       }
 
       setServerMessage(messages.join('\n\n'));
