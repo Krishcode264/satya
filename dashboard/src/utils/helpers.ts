@@ -29,3 +29,4 @@ export const getSeverityColor = (severity: number): string => {
   return 'bg-purple-500';
 };
 
+

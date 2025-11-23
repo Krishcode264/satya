@@ -47,14 +47,22 @@ interface SummaryCardProps {
   index: number;
 }
 
-/* ---------------------- REPORT GENERATION ---------------------- */
+/* ---------------------- DOCX GENERATOR ---------------------- */
 
-// DOCX CREATOR
 async function generateDocxReport(text: string) {
-  const paragraphs = text.split("\n").map(
+  const lines = text.split("\n");
+
+  const paragraphs = lines.map(
     (line) =>
       new Paragraph({
-        children: [new TextRun({ text: line, size: 24 })],
+        spacing: { after: 200 },
+        children: [
+          new TextRun({
+            text: line.trim(),
+            bold: line.trim().endsWith(":"),
+            size: line.trim().endsWith(":") ? 32 : 24,
+          }),
+        ],
       })
   );
 
@@ -66,54 +74,87 @@ async function generateDocxReport(text: string) {
 
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "attacker-report.docx";
+  link.download = "Incident_Report.docx";
   link.click();
 }
 
-// GEMINI - MAIN REPORT FUNCTION
-async function generateReport(data: AttackerData) {
+/* ---------------------- GEMINI REPORT GENERATOR ---------------------- */
+
+async function generateReport(
+  data: AttackerData,
+  setIsGenerating: any,
+  setProgress: any
+) {
   try {
+    setIsGenerating(true);
+    setProgress(10);
+
     const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    setProgress(25);
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+    });
 
     const prompt = `
-Generate a **highly detailed cybersecurity attacker analysis report**.
-Write in a formal professional cyber-forensics style.
+Generate a professional INCIDENT REPORT in plain text. 
+STRICT RULES:
+- Do NOT use markdown.
+- Do NOT use **bold**, *, #, or tables.
+- Use plain text with headings ending with ':'.
+- Use structured sections and clean paragraphs.
 
-Include sections:
+Sections Required:
+Executive Summary:
+Attacker Fingerprint & Identity Pattern:
+Attack Behaviour Analysis:
+Timeline of Events:
+Payload & Exploit Analysis:
+Risk Assessment:
+MITRE ATT&CK Mapping:
+Affected Routes & Endpoints:
+IP Reputation Review:
+Chart Interpretation:
+Recommended Defensive Measures:
+Final Conclusion:
 
-1. Attacker Overview  
-2. Fingerprint Pattern & Identification  
-3. Attack Behaviour Analysis  
-4. Detailed Attack Timeline  
-5. Payload Type Analysis  
-6. Risk Scoring (High, Medium, Low)  
-7. MITRE ATT&CK Mapping  
-8. Recommended Security Measures  
-9. Interpretation of Charts  
-10. Conclusion (In simple words)
-
-DATA BELOW:
+DATA:
 ${JSON.stringify(data, null, 2)}
-    `;
+`;
+
+    setProgress(40);
 
     const result = await model.generateContent(prompt);
+
+    setProgress(65);
+
     const reportText = result.response.text();
+
+    setProgress(85);
 
     await generateDocxReport(reportText);
 
+    setProgress(100);
+    setTimeout(() => setProgress(0), 1200);
   } catch (err) {
     console.error("Gemini Report Error:", err);
-    alert("❌ Failed to generate report. Check your API key.");
+    alert("❌ Failed to generate report.");
+    setProgress(0);
+  } finally {
+    setIsGenerating(false);
   }
 }
 
-/* ---------------------- PAGE COMPONENT ---------------------- */
+/* ---------------------- MAIN COMPONENT ---------------------- */
 
 export default function AttackerDetails() {
   const { fingerprint } = useParams<{ fingerprint: string }>();
   const [data, setData] = useState<AttackerData | null>(null);
+
+  // Loading state & Progress bar
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const formatDate = (s?: string) =>
     s ? new Date(s).toLocaleString() : "N/A";
@@ -134,7 +175,7 @@ export default function AttackerDetails() {
 
   if (!data)
     return (
-      <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="flex justify-center items-center min-h-screen bg-slate-950">
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full opacity-20 blur-xl animate-pulse"></div>
           <div className="relative w-12 h-12 border-2 border-slate-700 border-t-blue-400 rounded-full animate-spin"></div>
@@ -143,19 +184,19 @@ export default function AttackerDetails() {
     );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-8 md:p-12">
+    <div className="min-h-screen bg-slate-950 text-white p-8 md:p-12">
 
       {/* Back Link */}
       <div className="mb-10">
         <Link
           to="/attackers"
-          className="inline-flex items-center gap-2 text-blue-300 hover:text-blue-200 transition-colors group"
+          className="inline-flex items-center gap-2 text-blue-300 hover:text-blue-200 transition"
         >
-          <span className="group-hover:-translate-x-1 transition-transform">←</span>
+          <span className="group-hover:-translate-x-1 transition">←</span>
           Back to Threats
         </Link>
 
-        <h1 className="text-4xl md:text-5xl font-bold mt-4 bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-500 text-transparent bg-clip-text">
+        <h1 className="text-5xl font-bold mt-4 bg-gradient-to-r from-blue-400 to-cyan-300 text-transparent bg-clip-text">
           Attacker Analysis
         </h1>
 
@@ -165,62 +206,35 @@ export default function AttackerDetails() {
         </p>
       </div>
 
-      {/* Report Button */}
+      {/* Generate Button */}
       <button
-        onClick={() => generateReport(data)}
-        className="mt-4 px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-400 text-black font-bold hover:scale-105 transition-all shadow-lg"
+        disabled={isGenerating}
+        onClick={() => generateReport(data, setIsGenerating, setProgress)}
+        className={`mt-4 px-6 py-3 rounded-lg font-bold transition-all shadow-lg 
+          ${isGenerating
+            ? "bg-slate-600 text-gray-300 cursor-not-allowed"
+            : "bg-gradient-to-r from-blue-500 to-cyan-400 text-black hover:scale-105"
+          }`}
       >
-        📄 Download Detailed Report
+        {isGenerating ? (
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+            Generating Report...
+          </div>
+        ) : (
+          "📄 Download Detailed Report"
+        )}
       </button>
 
-      {/* Time Stats */}
-      {/* Time Stats */}
-      {/* Time Stats */}
-      {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 my-10">
-        {data.attempts.length > 0 && (
-          <>
-            <TimeCard
-              label="First Seen"
-              value={formatDate(
-                data.attempts.reduce<string | undefined>((min, a) => {
-                  const f = a.first_seen;
-                  if (!min) return f;
-                  return new Date(f) < new Date(min) ? f : min;
-                }, undefined)
-              )}
-            />
-
-            <TimeCard
-              label="Last Seen"
-              value={formatDate(
-                data.attempts.reduce<string | undefined>((max, a) => {
-                  const l = a.last_seen;
-                  if (!max) return l;
-                  return new Date(l) > new Date(max) ? l : max;
-                }, undefined)
-              )}
-            />
-          </>
-        )}
-      </div> */}
-
-
-
-      {/*       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 my-10">
-        {data.attempts[0] && (
-          <>
-            <TimeCard label="First Seen" value={formatDate(data.attempts[0].first_seen)} />
-            <TimeCard label="Last Seen" value={formatDate(data.attempts[0].last_seen)} />
-          </>
-        )}
-        {data.logs[0] && (
-          <>
-            <TimeCard label="Log Created" value={formatDate(data.logs[0].createdAt)} />
-            <TimeCard label="Last Update" value={formatDate(data.logs[0].updatedAt)} />
-          </>
-        )}
-      </div> */}
+      {/* Progress Bar */}
+      {progress > 0 && (
+        <div className="w-full bg-slate-800 rounded-full h-3 mt-4 overflow-hidden border border-slate-700">
+          <div
+            className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          ></div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-10">
@@ -251,7 +265,7 @@ export default function AttackerDetails() {
           {data.attempts.map((a) => (
             <div
               key={a._id}
-              className="p-5 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-blue-500/50 hover:bg-slate-900/70 transition-all"
+              className="p-5 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:border-blue-500/50 transition"
             >
               <AttemptInfo a={a} formatDate={formatDate} />
             </div>
@@ -263,15 +277,6 @@ export default function AttackerDetails() {
 }
 
 /* ---------------------- SMALL COMPONENTS ---------------------- */
-
-// function TimeCard({ label, value }: { label: string; value: string }) {
-//   return (
-//     <div className="p-4 bg-slate-900/50 border border-slate-700/50 rounded-lg">
-//       <p className="text-xs text-slate-400 uppercase mb-2">{label}</p>
-//       <p className="text-sm text-blue-300 font-mono">{value}</p>
-//     </div>
-//   );
-// }
 
 function ChartCard({
   title,
@@ -297,7 +302,7 @@ function AttemptInfo({ a, formatDate }: { a: Attempt; formatDate: any }) {
       <Info label="Route" value={a.route} mono />
       <Info label="Count" value={a.count.toString()} mono />
       <Info label="IP" value={a.ip} mono />
-      <Info label="Sample Payload" value={a.sample_payload} mono />
+      <Info label="Payload" value={a.sample_payload} mono />
       <Info label="First Seen" value={formatDate(a.first_seen)} />
       <Info label="Last Seen" value={formatDate(a.last_seen)} />
     </div>
@@ -316,9 +321,7 @@ function Info({
   return (
     <div>
       <p className="text-xs text-slate-400 uppercase mb-1">{label}</p>
-      <p className={`text-sm text-slate-300 ${mono ? "font-mono" : ""}`}>
-        {value}
-      </p>
+      <p className={`text-sm text-slate-300 ${mono ? "font-mono" : ""}`}>{value}</p>
     </div>
   );
 }
