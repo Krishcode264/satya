@@ -43,58 +43,152 @@ router.get('/attackers', async (req, res) => {
 
 
 router.get('/attacker/:fingerprint', async (req, res) => {
-    try {
-      const { fingerprint } = req.params;
-  
-      // All raw attack logs (timeline)
-      const logs = await AttackLog.find({ fingerprint })
-        .sort({ timestamp: 1 })
-        .lean();
-  
-      // Summary information
-      const summary = {
+  try {
+    const { fingerprint } = req.params;
+
+    // Fetch grouped attack attempts for this FP
+    const attempts = await AttackAttempt.find({ fingerprint }).lean();
+
+    if (!attempts.length) {
+      return res.json({
         fingerprint,
-        totalAttacks: logs.length,
-  
-        sqlInjection: logs.filter(l => l.attackType === 'sql_injection').length,
-        xssAttack: logs.filter(l => l.attackType === 'xss_attack').length,
-        commandInjection: logs.filter(l => l.attackType === 'command_injection').length,
-        dirTraversal: logs.filter(l => l.attackType === 'directory_traversal').length,
-        unknownSuspicious: logs.filter(l => l.attackType === 'unknown_suspicious').length,
-        normal: logs.filter(l => l.attackType === 'normal').length,
-  
-        highRiskCount: logs.filter(l => l.severity >= 4).length,
-  
-        attacksByPage: {},
-        attacksByHour: {}
-      };
-  
-      // Build page stats
-      logs.forEach(log => {
-        const page = log.route || log.page || "unknown";
-        if (!summary.attacksByPage[page]) summary.attacksByPage[page] = 0;
-        summary.attacksByPage[page]++;
+        summary: {
+          fingerprint,
+          totalAttacks: 0,
+          sqlInjection: 0,
+          xssAttack: 0,
+          commandInjection: 0,
+          dirTraversal: 0,
+          unknownSuspicious: 0,
+          highRiskCount: 0,
+          attacksByPage: {},
+          attacksByHour: {}
+        },
+        attempts
       });
-  
-      // Build hour stats
-      logs.forEach(log => {
-        const h = new Date(log.timestamp).getHours();
-        summary.attacksByHour[h] = (summary.attacksByHour[h] || 0) + 1;
-      });
-  
-      // Extra attacker info from AttackAttempt
-      const attempts = await AttackAttempt.find({ fingerprint }).lean();
-  
-      res.json({
-        fingerprint,
-        summary,
-        attempts,
-        logs
-      });
-  
-    } catch (err) {
-      console.error("Error loading attacker detail:", err);
-      res.status(500).json({ error: "Internal server error" });
     }
-  });
+
+    // Compute total attacks (sum of counts)
+    const totalAttacks = attempts.reduce((sum, a) => sum + (a.count || 1), 0);
+
+    // Count attack types
+    const sqlInjection = attempts
+      .filter(a => a.attack_type === 'sql_injection')
+      .reduce((acc, a) => acc + a.count, 0);
+
+    const xssAttack = attempts
+      .filter(a => a.attack_type === 'xss_attack')
+      .reduce((acc, a) => acc + a.count, 0);
+
+    const commandInjection = attempts
+      .filter(a => a.attack_type === 'command_injection')
+      .reduce((acc, a) => acc + a.count, 0);
+
+    const dirTraversal = attempts
+      .filter(a => a.attack_type === 'directory_traversal')
+      .reduce((acc, a) => acc + a.count, 0);
+
+    const unknownSuspicious = attempts
+      .filter(a => a.attack_type === 'unknown_suspicious')
+      .reduce((acc, a) => acc + a.count, 0);
+
+    const highRiskCount = attempts
+      .filter(a => a.severity >= 4)
+      .reduce((acc, a) => acc + a.count, 0);
+
+    // Page stats
+    const attacksByPage = {};
+    attempts.forEach(a => {
+      const page = a.route || "unknown";
+      attacksByPage[page] = (attacksByPage[page] || 0) + a.count;
+    });
+
+    // Hour stats (based on last_seen timestamp)
+    const attacksByHour = {};
+    attempts.forEach(a => {
+      const hour = new Date(a.last_seen).getHours();
+      attacksByHour[hour] = (attacksByHour[hour] || 0) + a.count;
+    });
+
+    const summary = {
+      fingerprint,
+      totalAttacks,
+      sqlInjection,
+      xssAttack,
+      commandInjection,
+      dirTraversal,
+      unknownSuspicious,
+      highRiskCount,
+      attacksByPage,
+      attacksByHour
+    };
+
+    res.json({
+      fingerprint,
+      summary,
+      attempts
+    });
+
+  } catch (err) {
+    console.error("Error loading attacker detail:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+// router.get('/attacker/:fingerprint', async (req, res) => {
+//     try {
+//       const { fingerprint } = req.params;
+  
+//       // All raw attack logs (timeline)
+//       const logs = await AttackLog.find({ fingerprint })
+//         .sort({ timestamp: 1 })
+//         .lean();
+  
+//       // Summary information
+//       const summary = {
+//         fingerprint,
+//         totalAttacks: logs.length,
+  
+//         sqlInjection: logs.filter(l => l.attackType === 'sql_injection').length,
+//         xssAttack: logs.filter(l => l.attackType === 'xss_attack').length,
+//         commandInjection: logs.filter(l => l.attackType === 'command_injection').length,
+//         dirTraversal: logs.filter(l => l.attackType === 'directory_traversal').length,
+//         unknownSuspicious: logs.filter(l => l.attackType === 'unknown_suspicious').length,
+//         normal: logs.filter(l => l.attackType === 'normal').length,
+  
+//         highRiskCount: logs.filter(l => l.severity >= 4).length,
+  
+//         attacksByPage: {},
+//         attacksByHour: {}
+//       };
+  
+//       // Build page stats
+//       logs.forEach(log => {
+//         const page = log.route || log.page || "unknown";
+//         if (!summary.attacksByPage[page]) summary.attacksByPage[page] = 0;
+//         summary.attacksByPage[page]++;
+//       });
+  
+//       // Build hour stats
+//       logs.forEach(log => {
+//         const h = new Date(log.timestamp).getHours();
+//         summary.attacksByHour[h] = (summary.attacksByHour[h] || 0) + 1;
+//       });
+  
+//       // Extra attacker info from AttackAttempt
+//       const attempts = await AttackAttempt.find({ fingerprint }).lean();
+  
+//       res.json({
+//         fingerprint,
+//         summary,
+//         attempts,
+//         logs
+//       });
+  
+//     } catch (err) {
+//       console.error("Error loading attacker detail:", err);
+//       res.status(500).json({ error: "Internal server error" });
+//     }
+//   });
 module.exports = {router};

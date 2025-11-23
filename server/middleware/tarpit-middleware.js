@@ -46,7 +46,7 @@ async function tarpitMiddleware(req, res, next) {
 
     // Apply progressive delay if count exceeds threshold
     console.log(count,"count");
-    if (count > 3) {
+    if (count > 30) {
         console.log("count is greater than 3 , delay activated ");
       // Calculate delay: (count - 3) * 200ms, max 5000ms
       const delay = Math.min((count - 3) * 200, 5000);
