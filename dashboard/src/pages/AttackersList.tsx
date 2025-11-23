@@ -29,7 +29,7 @@ export default function AttackersList() {
 
   useEffect(() => {
     axios
-      .get<AttackersResponse>("https://satya-ugee.onrender.com/api/report/attackers")
+      .get<AttackersResponse>(`${import.meta.env.VITE_API_URL}/api/report/attackers`)
       .then((res) => {
         setAttackers(res.data.attackers);
         setLoading(false);
@@ -89,7 +89,7 @@ export default function AttackersList() {
                       {atk.ip}
                     </p>
                     <p className="text-xs text-slate-400 mt-1 truncate max-w-xs">
-                      {atk.fingerprint}
+                      Fingerprint: {atk.fingerprint}
                     </p>
                   </div>
                   <div className="w-2 h-2 rounded-full bg-blue-400 shadow-lg shadow-blue-400/50 group-hover:shadow-blue-300/80 transition-shadow"></div>

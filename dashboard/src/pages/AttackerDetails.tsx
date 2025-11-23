@@ -11,6 +11,7 @@ import { Document, Packer, Paragraph, TextRun } from "docx";
 
 interface Attempt {
   _id: string;
+  count: number;
   attack_type: string;
   route: string;
   sample_payload: string;
@@ -122,7 +123,7 @@ export default function AttackerDetails() {
 
     axios
       .get<AttackerData>(
-        `https://satya-ugee.onrender.com/api/report/attacker/${fingerprint}`
+        `${import.meta.env.VITE_API_URL}/api/report/attacker/${fingerprint}`
       )
       .then((res) => setData(res.data))
       .catch((err) => {
@@ -173,6 +174,39 @@ export default function AttackerDetails() {
       </button>
 
       {/* Time Stats */}
+      {/* Time Stats */}
+      {/* Time Stats */}
+      {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 my-10">
+        {data.attempts.length > 0 && (
+          <>
+            <TimeCard
+              label="First Seen"
+              value={formatDate(
+                data.attempts.reduce<string | undefined>((min, a) => {
+                  const f = a.first_seen;
+                  if (!min) return f;
+                  return new Date(f) < new Date(min) ? f : min;
+                }, undefined)
+              )}
+            />
+
+            <TimeCard
+              label="Last Seen"
+              value={formatDate(
+                data.attempts.reduce<string | undefined>((max, a) => {
+                  const l = a.last_seen;
+                  if (!max) return l;
+                  return new Date(l) > new Date(max) ? l : max;
+                }, undefined)
+              )}
+            />
+          </>
+        )}
+      </div> */}
+
+
+
+      {/*       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 my-10">
         {data.attempts[0] && (
           <>
@@ -186,7 +220,7 @@ export default function AttackerDetails() {
             <TimeCard label="Last Update" value={formatDate(data.logs[0].updatedAt)} />
           </>
         )}
-      </div>
+      </div> */}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-10">
@@ -230,14 +264,14 @@ export default function AttackerDetails() {
 
 /* ---------------------- SMALL COMPONENTS ---------------------- */
 
-function TimeCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-4 bg-slate-900/50 border border-slate-700/50 rounded-lg">
-      <p className="text-xs text-slate-400 uppercase mb-2">{label}</p>
-      <p className="text-sm text-blue-300 font-mono">{value}</p>
-    </div>
-  );
-}
+// function TimeCard({ label, value }: { label: string; value: string }) {
+//   return (
+//     <div className="p-4 bg-slate-900/50 border border-slate-700/50 rounded-lg">
+//       <p className="text-xs text-slate-400 uppercase mb-2">{label}</p>
+//       <p className="text-sm text-blue-300 font-mono">{value}</p>
+//     </div>
+//   );
+// }
 
 function ChartCard({
   title,
@@ -261,6 +295,7 @@ function AttemptInfo({ a, formatDate }: { a: Attempt; formatDate: any }) {
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Info label="Attack Type" value={a.attack_type} />
       <Info label="Route" value={a.route} mono />
+      <Info label="Count" value={a.count.toString()} mono />
       <Info label="IP" value={a.ip} mono />
       <Info label="Sample Payload" value={a.sample_payload} mono />
       <Info label="First Seen" value={formatDate(a.first_seen)} />
