@@ -41,6 +41,20 @@ export default function AttackersList() {
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-8 md:p-12">
       {/* Header Section */}
       <div className="mb-12">
+
+
+
+ {/* Back Link */}
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 text-blue-300 hover:text-blue-200 transition-colors group"
+        >
+          <span className="group-hover:-translate-x-1 transition-transform">←</span>
+          Back 
+        </Link>
+
+
+        
         <h1 className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-500 text-transparent bg-clip-text animate-in fade-in slide-in-from-top-4 duration-700">
           Threat Intelligence
         </h1>
